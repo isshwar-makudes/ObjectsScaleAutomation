@@ -209,17 +209,23 @@ def debug_print(msg):
   print datetime.now(), "(%s)"%inspect.stack()[1][3], msg
 
 class UploadObjs(object):
-  """Module which can trigger many workloads on S3 endpoint.
-  """
+  """Module which can trigger many workloads on S3 endpoint."""
 
   def __init__(self, endpoint, static_data=False, **kwargs):
-    """Initilize class with required class params.
+    """
+    Initilize class with required class params.
+
+    Args:
+      endpoint(str): a string of s3 endpoints as coma separated values
+      static_data(bool): TBD
+      kwargs(dict): all the other arguments required
     """
     self._kwargs = kwargs
     self.instance_uuid = uuid4().hex
     self._init_vars(endpoint, static_data)
 
   def _init_vars(self, endpoint, static_data):
+    """initialize all the variables needed for the object"""
     self._utils = Utils()
     self._static_data = static_data
     self._test_start_time = datetime.now()
@@ -264,6 +270,7 @@ class UploadObjs(object):
     self._init_db()
 
   def _init_db(self):
+    """initialize the in memory database for all the workloads running"""
     self._webserver = None
     self._instance_num_objs, self._instance_size = 0, 0
     self._total_ops_recorded = {
@@ -347,6 +354,7 @@ class UploadObjs(object):
     return False if self._time_to_exit else True
 
   def _debug_logging(self, msg, level=0, msg_type="debug"):
+    """logs the message with the log level according to argument"""
     if self._debug_level < level:
       return
     if msg_type == Constants.MSG_TYPE_DEBUG:
@@ -357,9 +365,14 @@ class UploadObjs(object):
       WARN(msg)
 
   def capture_tcpdump(self, **kwargs):
+    """
+    this method is used mainly to track nfs requests it starts the packet
+    tracing using tcpdump cmd
+    """
     self._utils.start_tcpdump(kwargs["tcpdump_cmd"], self.logpath)
 
   def _init_bucketinfo_db(self, archive=False):
+    """initialize bucket information database"""
     if archive:
       cd = "%s"%(datetime.now())
       self._total_ops_recorded["backup"]["bucketinfo"][cd] = self._bucket_info
@@ -379,12 +392,18 @@ class UploadObjs(object):
                          }
 
   def archive_results(self):
+    """archive the stats and db to s3 bucket"""
     try:
       self._archive_results()
     except Exception as err:
       ERROR("Failed to archive results. Err : %s"%err)
 
   def _archive_results(self):
+    """
+    archive the stats and db to s3 bucket,
+    it will take archival_endpoint_url, archival_access_key, archival_secret_key
+    from self._kwargs and push the files using given parameter
+    """
     bucket = self._kwargs["archival_bucket_name"]
     if not hasattr(self, "_archival_s3c"):
       INFO("Archival location : %s / %s / %s"
@@ -421,6 +440,20 @@ class UploadObjs(object):
               %(objname, self._kwargs["archival_endpoint_url"], err))
 
   def _pause_workload(self, workload_name, sleep_time=0):
+    """
+    this method will be called every time when controller thread push new
+    workload to worker_queue to check if the given workload is paused or not
+    returns whether the workload will be paused or not depending on the
+    "auto_deletes_enabled" ans "stop_writes" flags in db
+
+    Args:
+      workload_name(str): name of the workload to check
+      sleep_time(int): sleep time defines for how long thread should be in sleep
+                       state when the workload is paused
+
+    Returns: bool
+      True, if workload should be paused, False otherwise
+    """
     auto_deletes = self._total_ops_recorded["vars"]["auto_deletes_enabled"]
     stop_writes = self._total_ops_recorded["vars"]["stop_writes"]
     msg = "Workload : %s is Paused, AutoDeletes : %s, StopWrites : %s, Sleep "\
@@ -440,6 +473,13 @@ class UploadObjs(object):
     return res
 
   def copy(self, **kwargs):
+    """
+    controller thread will call this method, it will generate relevant kwargs
+    for copy and will push the actual method and kwargs in the worker queue
+
+    Args:
+
+    """
     del(kwargs)
     srcbucket, srckey, srcsize, srctag, srcversion = None, None, 0, None, None
     refresh_freq = self._kwargs['copy_srcobj_refresh_frequency']
@@ -2297,6 +2337,18 @@ class UploadObjs(object):
     self._signal_handler_registered = True
 
   def _exit_test(self, workload, force=False, verbose=True):
+    """
+    it will return False if _time_to_exit and _execution_completed both are
+    False else it will return True and if Force is True, it will first stop the
+    currentThread and return True, irrespective of the workload
+
+    Args:
+      workload(str): name of the workload
+      force(bool,Optional): if True, it will stop the thread calling this method
+                            Default: False
+
+    Returns: bool
+    """
     if not self._time_to_exit and not self._execution_completed:
       return False
     if verbose:
@@ -2643,6 +2695,10 @@ class UploadObjs(object):
     return False
 
   def _kill_test(self):
+    """"
+    sets the self._total_ops_recorded["TestStatus"]["status"] = "Killed" and
+    kills the current process
+    """
     pid=getpid()
     WARN("Killing Test PID : %s"%(pid))
     ERROR("First exception Found : %s"
@@ -3516,6 +3572,11 @@ class UploadObjs(object):
 
   def _set_exit_marker(self, fatal_msg, fatal=True, exception="",
                        raise_exception=True, caller=None, reason=None):
+    """
+    this method sets _time_to_exit to true and also appends fatal_msg to
+    self.fatals and also updates the _total_ops_recorded["TestStatus"] fields
+    and writes the fatal to Constants.EXIT_MARKER_FILE
+    """
     if not caller: caller=inspect.stack()[1][3]
     fatal_msg = "(%s) %s"%(datetime.now(), fatal_msg)
     if fatal_msg not in self.fatals:
@@ -3550,6 +3611,13 @@ class UploadObjs(object):
       raise Exception(fatal)
 
   def _dump_records(self, filename=None):
+    """
+    dumps the _total_ops_recorded and _bucket_info in files
+
+    Args:
+      filename(str,Optional): path of file to store the _total_ops_recorded
+                              Default: Constants.STATIC_RECORDS_FILE
+    """
     if not filename:
       filename = Constants.STATIC_RECORDS_FILE
     try:
@@ -3564,7 +3632,9 @@ class UploadObjs(object):
       print "ERROR : Failed to dump records. Error : %s"%err
 
   def _start_and_monitor(self, workloads, monitor_workloads, **kwargs):
-    """Start workload threads. And monitor progress.
+    """
+    Start workload threads. And monitor progress. it will run monitoring
+    processes in a while loop until time_to_exit is true
     """
     self._workload_start_time = time()
     self._release_setup_after_test = kwargs.pop("release_setup_after_test")
@@ -3596,6 +3666,10 @@ class UploadObjs(object):
       sleep(30)
 
   def _may_be_delete_all_objects(self):
+    """
+    it will initialize "auto_deletes" key in _total_ops_recorded["opstats"] and
+    will call the _check_space_reclaim
+    """
     self._total_ops_recorded["opstats"].setdefault("auto_deletes", {"stats":[]})
     cool_time = 1800
     cool_time = 30
@@ -3614,6 +3688,19 @@ class UploadObjs(object):
     self._check_space_reclaim()
 
   def _check_space_reclaim(self, wait_for_reclaim=True, interval=5):
+    """
+    checks the space usage through local map after every certain interval in a
+    loop and when it comes under the desirable value it exists from the loop,
+    it will also update _total_ops_recorded["opstats"]["auto_deletes"]["stats"]'s
+    last entry values
+
+    Args:
+      wait_for_reclaim(bool,Optional): if True, it will call the
+       wait_for_space_reclaimation method which will trigger atlas and curator
+       scans to reclaim the deleted objects space
+       Default: True
+      interval(int,Optional): Default: 5
+    """
     storage_stats = self._get_total_objects_size()
     local_storage_usage = storage_stats["local"]["total_storage_used"]
     storage_to_free = (local_storage_usage*self._kwargs[
@@ -3671,6 +3758,12 @@ class UploadObjs(object):
               "end_time":datetime.now()})
 
   def _wait_for_space_reclaimation(self):
+    """
+    this method will trigger atlas full scan and curator full scan, so that
+    cluster can reclaim the space used by deleted objects and updates the
+    _total_ops_recorded["opstats"]["auto_deletes"]["stats"] list's last entry
+    values
+    """
     if not self._objectscluster:
       ERROR("PC details not found. Cannot wait for ATLAS/Curator space reclaim")
       return
@@ -3738,6 +3831,18 @@ class UploadObjs(object):
         delay_between_scans -= 30
 
   def _get_total_objects_size(self):
+    """
+    returns the total storage space used by automation
+
+    Returns: dict
+      local: dict, it has values calculated based on our local map,
+             it has three keys,
+                  1. total_size
+                  2. total_deleted_size
+                  3. total_storage_used
+      pc: dict, it has values which are returned from pc group apis, it has key
+                  1. total_size
+    """
     size = self._total_ops_recorded.get("s3_copy_object", {}).get("size",0)
     size += self._total_ops_recorded.get("put_object", {}).get("size",0)
     size += self._total_ops_recorded.get("_nfs_write", {}).get("size",0)
@@ -3849,6 +3954,16 @@ class UploadObjs(object):
       self._task_manager.add(getattr(self, monitor), **kwargs)
 
   def _stop_workload(self, reason=None, close_error_fh=True):
+    """"
+    this method will be called by monitor methods in case of checks are failing
+    and also start_workload will call in case of exception or change_in_workload
+    or after the execution_completed
+    sets the _total_ops_recorded["vars"]["stop_workload_initiated"] to True,
+    dump the dbs to files, unmount nfs, stops all the threads, aborts all
+    ongoing multiparts, acrhives stats and db to s3 bucket, closes the web
+    server and sets the value of ["TestStatus"]["status"] according to
+    self.fatals
+    """
     with self._lock:
       if self._total_ops_recorded["vars"]["stop_workload_initiated"]:
         ERROR("Skipping stop workload flow, since its already done")
@@ -3909,6 +4024,20 @@ class UploadObjs(object):
          %(str(timedelta(seconds=time()-self._start_time)), self.logfile))
 
   def _may_be_stop_writes(self):
+    """
+    this method will be called periodically by monitor class
+    it will set the flags auto_deletes_enabled and stop_writes if we exceeded
+    the limit of storage that we provided and after the enough storage is freed
+    from pc, it will reset the flags, it will flush the list_for_copy map and
+    it will exit
+
+    Returns : bool(actually there is no need to return anything)
+      True, if stop_writes is already True or we cleared enough space
+      (_may_be_delete_all_objects will exit only after checking enough space
+       reclaimed)
+      False, if _storage_limit is not set or if the storage_limit is not
+      exceeded
+    """
     if self._total_ops_recorded["vars"]["stop_writes"]:
       WARN("Writes are already stopped, retry later")
       return True
@@ -4049,7 +4178,13 @@ class UploadObjs(object):
                             exception=''.join(format_exc()))
 
   def _wait_for_all_workers(self, timeout=1800, force_kill=False):
-    """Wait until all workers exits.
+    """
+    waits for all workers to free, and if force_kill=True, it will stop all the
+    threads forcefully
+
+    Args:
+      timeout(int,Optional): timeout Default:1800
+      force_kill(bool,Optional): flag to forcefully stop all the threads
     """
     timeout_80perc = int(timeout*0.8) #80% of timeout
     start_time = 0
@@ -4239,6 +4374,19 @@ class ObjNameDistributor():
     return res
 
   def may_be_lock_unlock_obj(self, bucket, key, size, action, debug=False):
+    """
+    locks or unlocks the given object_name by putting it in "active_objects" or
+    deleting it
+
+    Args:
+      bucket(str): bucket name of the object
+      key(str): object name to be locked
+      size(int): object_size
+      action(str): Constants.LOCK if you want to lock, Constannt.UNLOCK if you
+                   want to unlock
+      debug(bool,Optional): True, if you want to log verbose
+                            Default: False
+    """
     #objkey = "%s:%s:%s"%(bucket, key, size)
     objkey = "%s:%s"%(bucket, key)
     thrdname = currentThread().name
@@ -4272,6 +4420,15 @@ class ObjNameDistributor():
       return True
 
   def _is_obj_locked(self, bucket, key, size=None):
+    """
+    returns if object is already locked or not
+
+    Args:
+      bucket(str): bucket name of the object
+      key(str): object name to be locked
+
+    Returns: True if object is already locked, False otherwise
+    """
     keyname = "%s:%s"%(bucket, key)
     if keyname in self._testobj._total_ops_recorded["active_objects"]:
       return True
@@ -4436,6 +4593,16 @@ class ObjNameDistributor():
     return None, None, 0, None, None
 
   def _get_bucket_for_copy(self, prefix, nfs_workload):
+    """
+    randomly selects bucket from bucket_info map
+
+    Args:
+      prefix(str): prefix to pass to _update_list_for_copy_map
+      nfs_workload(bool): True if we want nfs enbled bucket, False otherwise
+
+    Returns: str
+      Randomly selected bucket name
+    """
     bucket =None
     if nfs_workload:
       bucket = choice(self._testobj._nfsops._registered_buckets)
@@ -4447,6 +4614,17 @@ class ObjNameDistributor():
 
   def _update_list_for_copy_map(self, bucket, prefix=None, objs=None,
                                 marker=None, vmarker=None):
+    """
+    updates map values in "list_for_copy"
+
+    Args:
+      bucket(str): bucket name
+      prefix(str): prefix to copy
+      objs([str]): new list of object names to update
+      marker(str): key marker to generate new list of objects when current list
+                   goes empty
+      vmarker(str): version marker for corresponding key marker in case of versioned bucket
+    """
     if bucket not in self._testobj._bucket_info["list_for_copy"]:
       self._testobj._bucket_info["list_for_copy"][bucket] = {}
     if prefix and prefix not in self._testobj._bucket_info[
@@ -4471,6 +4649,17 @@ class ObjNameDistributor():
                                           bucket][prefix]["vmarker"] = vmarker
 
   def _get_object_for_copy(self, bucket, prefix):
+    """
+    returns the object with current prefix map object list, if the list is empty
+    it will update the map and will not return anything
+
+    Args:
+      bucket(str): bucket name from which you want to copy the object
+      prefix(str): prefix of the object name you want to copy
+
+    Returns: str or None
+      if object list is not empty then it will return object_name otherwise None
+    """
     with self._lock:
       if self._testobj._bucket_info["list_for_copy"][bucket][prefix]["objs"]:
         return self._testobj._bucket_info[
@@ -4503,6 +4692,14 @@ class ObjNameDistributor():
       return "_"
 
   def _discard_cached_list(self, maps=None, filename=None):
+    """
+    this method will append the current list_for_copy map at the end of the file
+    given by filename and reset _bucket_info["list_for_copy"] to empty dict
+
+    Args:
+      filename(str,Optional): file to write the data
+                              Default: Constants.CACHE_DISCARD_FILENAME
+    """
     if not filename:
       filename = path.join(self._testobj.logpath,
                            Constants.CACHE_DISCARD_FILENAME)
@@ -4515,8 +4712,27 @@ class ObjNameDistributor():
     self._testobj._bucket_info["list_for_copy"] = {}
 
 class DynamicExecution():
+  """
+  this class will handle thread creation, assigning workloads to thread and
+  stopping the threads, it uses queues for assigning the workloads to threads,
+  it maintains the self.queues dict which has quota_type as keys and Queue
+  object as value and every thread will be tied to one of the quota type, and
+  will execute methods only in that queue
+  """
   def __init__(self, threadpoolsize=10, timeout=7200, quotas=None,
         strict_quota_workers=["nfsdelete", "nfsrename", "delete", "nfsowrite"]):
+    """
+    it will initialize the dynamic execution class
+
+    Args:
+      threadpoolsize(int,Optional): no of threads that workload wants to create
+                                     Default: 10
+      timeout(int,Optional): no of seconds to wait before throwing timeout exception while adding load to queue
+                             Default: 7200
+      quotas(dict,Optional): dictionary of workload_name and its percentage
+                             Default: self._default_quotas
+      strict_quota_workers([str]): TBD
+    """
     self._poolsize = threadpoolsize
     self._timeout = timeout
     self._strict_quota_workers = strict_quota_workers
@@ -4535,6 +4751,13 @@ class DynamicExecution():
     self._init_workers()
 
   def add(self, target, **kwargs):
+    """
+    it will add the target method to queue of quota_type provided in kwargs
+
+    Raises: Exception
+      if queue is raising exception on queue.put even after self._timeout time
+      then it will raise the exception
+    """
     timeout = kwargs.pop("timeout", self._timeout)
     quota_type = kwargs.pop("quota_type")
     queue = self._queues[quota_type]
@@ -4553,6 +4776,16 @@ class DynamicExecution():
                     %(self._timeout, target, quota_type))
 
   def complete_run(self, wait_time=1, timeout=600):
+    """
+    it will set self._time_to_exit to True, so execute method of every worker
+    will exit the loop and will set is_active=False, after setting the
+    _time_to_exit, it will pop out every worker from self._workers
+
+    Args:
+      wait_time(int,Optional): sleep time after every iteration in while loop
+                               Default: 1
+      timeout(int,Optional): Default: 600
+    """
     INFO("Complete run is called. Setting EXIT-MARKER=TRUE in DynamicExecution"
          ", Timeout : %s"%timeout)
     self._time_to_exit = True
@@ -4565,6 +4798,16 @@ class DynamicExecution():
       sleep(wait_time)
 
   def wait_for_all_worker_to_be_free(self, wait_time=1, timeout=300):
+    """
+    it will check whether all the workers are free currently
+
+    Args:
+      wait_time(int,Optional): wait_time, Default: 1
+      timeout(int,Optional): timeout, Default: 300
+
+    Returns: bool
+      True, if all workers gets free before time, False otherwise
+    """
     sleep(1)
     etime = time()+timeout
     while etime-time() > 0:
@@ -4585,6 +4828,13 @@ class DynamicExecution():
     return False
 
   def _stop_all_workers(self, quota_type=None):
+    """
+    stops all the threads for given quota_type
+
+    Args:
+      quota_type(str): workload type
+                       Default: self._quotas.keys()
+    """
     quota_types = [quota_type]
     if not quota_type:
       quota_types = self._quotas.keys()
@@ -4599,6 +4849,19 @@ class DynamicExecution():
             ERROR("Failed to stop worker : %s, Error : %s"%(thrd.name, err))
 
   def get_active_workers(self, quota_type=None, verbose=False):
+    """
+    this method will check the no of thread that are alive for given quota_type
+
+    Args:
+      quota_type(str,Optional): quota_type to check
+                                Default: self._quotas.keys()
+      verbos(bool,Optional): flag
+                             Default: False
+
+    Returns: dict
+      key: quota_type
+      value: number of live threads of quota_type
+    """
     res = {}
     quota_types = [quota_type]
     if not quota_type:
@@ -4615,9 +4878,16 @@ class DynamicExecution():
     return res
 
   def size(self):
+    """
+    returns self._poolsize
+    """
     return self._poolsize
 
   def _assign_workers(self):
+    """
+    this method will create the queue for every workload and will store it in
+    self._queues[quota_type]
+    """
     total_workers = 0
     for key in self._quotas.keys():
       num_workers = qlength = 0
@@ -4648,6 +4918,19 @@ class DynamicExecution():
       pass
 
   def _get_task(self, worker_type, timeout=None):
+    """
+    this method will be called by worker._get_task
+    it will return the task from respective worker_type(quota_type)
+    queue
+
+    Args:
+      worker_type(str): quota_type
+      timeout(int,Optional): timeout before raising the exception
+
+    Returns: dict
+      target: the method to be executed by thread
+      kwargs: kwargs to pass to method
+    """
     stime = time()
     while not self._time_to_exit:
       if self._queues[worker_type].empty():
@@ -4672,6 +4955,11 @@ class DynamicExecution():
         continue
 
   def _init_workers(self):
+    """
+    this method intialize workers and threads needed for each
+    quota_type(workload) and assign the each list of threads to
+    self._quotas[quota_type]["threads"]
+    """
     self._assign_workers()
     for quota_type in self._quotas.keys():
       INFO("Creating workers for : %s workload, with args : %s"
@@ -4685,6 +4973,18 @@ class DynamicExecution():
       self._quotas[quota_type]["threads"] = threads
 
   def _start_worker(self, quota_type, worker_name, daemon, retries=3):
+    """
+    this method will intialize the worker of given quota_type, creates a
+    thread and set the target of thread as execute method of worker and
+    also pushes the worker object to self._workers list
+
+    Args:
+      quota_type(str): workload to initialize the worker object with
+      worker_name(str): name to assign to the thread
+      daemon(bool): True, if we want to set the thread as daemon thread
+      retries(int,Optional): no of retries while creating the thread
+                             Default: 3
+    """
     while retries > 0:
       retries -= 1
       try:
@@ -4762,8 +5062,26 @@ class worker:
       raise
 
 class RandomData():
+  """this class defines methods to generate and read random data"""
+
   def __init__(self, size, compressiable=True, zero_data=False,
                static_data=False, generate_md5=True):
+    """
+    Initialize the object
+
+    Args:
+      size(int): size of the data
+      compressible(bool,Optional): if True, it generates local_static_data
+                                    which is compressible
+                                    Default: True
+      zero_data(bool,Optional): if True, generates data containing all null
+                                characters
+                                Default: False
+      static_data(bool,Optional): TBD
+      generate_md5(bool,Optional): if True, it updates md5 sum after every read
+                                   operation
+                                   Default: True
+    """
     self._static_data = static_data
     self._zero_data = zero_data
     if self._zero_data:
@@ -4783,9 +5101,25 @@ class RandomData():
     self._data_returned = 0
 
   def __len__(self):
+    """
+    returns the size of data
+
+    Returns: size of data
+    """
     return self.size
 
   def read(self, size=1024*1024):
+    """
+    reads the data from self._current_block_being_read upto size, if
+    current_block is already read completely it will increment
+    self._current_pointer and generates new data block
+
+    Args:
+      size(int,Optional): size of the data you want to read
+                          default: 1024*1024
+
+    Returns: string of given size
+    """
     if self._current_pointer == self._total_blocks and \
           self._data_returned == self.size:
       if not self._md5sum:
@@ -4806,6 +5140,12 @@ class RandomData():
     return data
 
   def md5sum(self):
+    """
+    returns the md5 sum of the data generated
+
+    Returns: tuple(string,string)
+      md5 sum in hex and base64 encoding
+    """
     if not self._md5sum:
       self._current_pointer = 0
       while True:
@@ -4816,6 +5156,16 @@ class RandomData():
     return self._md5sum, self._base64
 
   def seek(self, offset, whence=0):
+    """
+    seek method which will change the current_pointer according to arguments
+
+    Args:
+      offset(int): number of positions to move forward
+      whence(int,Optional): defines point of reference
+                            0: (default)beginning of the file
+                            1: current_pointer
+                            2: end_of_file
+    """
     if not self._md5sum:
       self._datahash = md5()
     if offset > self._total_blocks:
@@ -4835,9 +5185,18 @@ class RandomData():
     self._current_pointer = offset
 
   def tell(self):
+    """
+    returns the size of data returned
+
+    Returns: integer
+    """
     return self._data_returned
 
   def _generate_data(self):
+    """
+    sets total number of blocks of local static data according to size and sets
+    random starting point for each of the block in self._local_data_map
+    """
     num_blocks_to_generate = self.size / Constants.LOCAL_STATIC_DATA_SIZE
     self._last_block_size = self.size%Constants.LOCAL_STATIC_DATA_SIZE
     self._total_blocks = num_blocks_to_generate
@@ -4854,6 +5213,16 @@ class RandomData():
     self._current_pointer = 0
 
   def _generate_data_block(self, offset):
+    """
+    returns the rotated copy the local_static_data according to current_pointer
+
+    Args:
+      current_pointer(tuple(int,int)): it gives the location from where to
+                                       rotate and size of data
+
+
+    Returns: string
+    """
     random_data_index = offset[0]
     size_of_block = offset[1]
     current_data_block = self._local_static_data[random_data_index:]
@@ -4863,6 +5232,12 @@ class RandomData():
     return  data[:size_of_block]
 
   def _generate_static_data(self):
+    """
+    returns static_data_block using which we can generate data of self.size
+    later
+
+    Returns: string
+    """
     if self._compressiable:
       return self._get_random_str(Constants.COMPRESSEABLE_DATA_SIZE) * (
             Constants.LOCAL_STATIC_DATA_SIZE/Constants.COMPRESSEABLE_DATA_SIZE)
@@ -4872,6 +5247,17 @@ class RandomData():
     return self._get_random_str(Constants.LOCAL_STATIC_DATA_SIZE)
 
   def _get_random_str(self, size, zero_data=False):
+    """
+    generates a random string of given size and replace last 53 bytes with
+    checksum, magic_byte and zeros
+
+    Args:
+      size(int): size of the data
+      zero_data(boo,Optional): if True, it generates string of null characters
+                               Default: False
+
+    Returns: string
+    """
     stime=time()
     num_subblocks_to_generate = size / Constants.SUB_BLOCK_SIZE
     data = ""
@@ -4890,10 +5276,28 @@ class RandomData():
     return data
 
   def _get_zero_data(self, size):
+    """
+    returns the string of null characters of given size
+
+    Args:
+      size(int): size of string to be generated
+
+    Returns: string
+    """
     with open("/dev/zero") as fh:
       return fh.read(size)
 
   def _update_data_with_offset(self, data):
+    """
+    updates the last few chars of every sub block with block no so that it can
+    be used for verification later
+
+    Args:
+       data(str): data to be updated
+
+    Returns: string
+      updated data
+    """
     num_sub_blocks = len(data)/Constants.SUB_BLOCK_SIZE
     final_data=""
     block_offset = self.tell()-len(data)
@@ -8923,7 +9327,7 @@ class S3Ops():
 
   def s3_get_endpoint_host(self, s3c=None, **kwargs):
     if s3c:
-      self.s3obj._endpoint.host
+      s3c._endpoint.host
     return self.s3obj._endpoint.host
 
   def _execute_s3_op(self, s3_method_name, **kwargs):
@@ -11080,11 +11484,25 @@ class Stats():
             "%.3f"%(stats["count"]/self.totaltime)]
 
 class Conditions():
+  """
+  this class is exepcted to check some conditions on ms before reporting
+  failures and existing tests
+  """
+
   def __init__(self, testobj):
+    """
+    initialize the object
+
+    Args:
+      testobj(obj): UploadObj class instance, required for db
+    """
     self._testobj = testobj
 
   def wait_for_bucket_list_compaction(self, wait_for_completion=True,
             timeout=3600*4, interval=60):
+    """"
+    it will
+    """
     stime = datetime.now()
     cstats = None
     while (datetime.now()-stime).total_seconds() > timeout:
@@ -11100,7 +11518,20 @@ class Conditions():
            "compaction to finish. All compactions stats : %s"%(timeout, cstats))
 
 class OpExecutor():
+  """
+  this class handles the execution of every operation and records its
+  execution details
+  """
   def __init__(self, uploadobj,  error_fh_tracker, **kwargs):
+    """
+    it will initialize the given class and also initialize the lock object,
+    which every thread need to acquire before updating db
+
+    Args:
+      uploadobj(obj): object needed to update db
+      error_fh_tracker(str): file path to append all the errors
+      kwargs(dict): anything needed for the class
+    """
     self._lock = RLock()
     self._objects = uploadobj
     self._prepare_retry_conditions_for_ops()
@@ -11128,6 +11559,10 @@ class OpExecutor():
     INFO("Op Retries : %s"%(self._op_retries))
 
   def _prepare_retry_conditions_for_ops(self):
+    """
+    prepares the self._op_retries dict based on "op_retries" passed as argument
+    in script
+    """
     self._per_op_retries = self._objects._kwargs.pop("op_retries")
     self._op_retries = {}
     if not self._per_op_retries:
@@ -11153,7 +11588,18 @@ class OpExecutor():
     return res
 
   def _get_op_retry_details(self, opname, current_retry_count,
-                            current_retry_delay, condition_fo_retry):
+                            current_retry_delay, condition_for_retry):
+    """
+    returns the retry_count, retry_delay and op_condtion according to opname,
+
+    Args:
+      opname(str): operation name
+      current_retry_count(int): retry count
+      current_retry_delay(int): delay in seconds
+      condition_for_retry(str): method name of Condition class to be checked
+
+    Returns: (int,int)
+    """
     retry_delay = self._objects._retry_delay
     retry_count = self._objects._retry_count
     if current_retry_delay > -1:
@@ -11163,12 +11609,24 @@ class OpExecutor():
     #if opname in self._op_retries:
     retry_count = self._op_retries.get(opname, {}).get("retries", retry_count)
     op_condition = self._op_retries.get(opname, {}).get("condition",
-                            condition_fo_retry)
+                            condition_for_retry)
     if op_condition and self._objects._conditions:
       op_condition = getattr(self._objects._conditions, op_condition)
     return retry_count, retry_delay, op_condition
 
   def _execute(self, method, **kwargs):
+    """
+    it will execute the method passed as first param, it will also takes care of
+    retries in case of exceptions, it will  also records the response of api in
+    self._local_records
+
+    Args:
+      method(obj): callable method object
+      kwargs(dict): other params needed
+
+    Raises: Exception
+      if enough number of retries are done for method
+    """
     retry_count, retry_delay, condition_for_retry= self._get_op_retry_details(
       method.__name__, kwargs.pop("retry_count", -1),
       kwargs.pop("retry_delay", -1),  kwargs.pop("condition_for_retry", None))
@@ -11227,6 +11685,18 @@ class OpExecutor():
     raise Exception(fatal_msg)
 
   def _check_condition_for_retry(self, condition_for_retry, method, err):
+    """
+    this method will check if reason for the given failure is legitimate i.e.
+    compaction is running in background or number of scans are too high
+
+    Args:
+      condition_for_retry(obj): method pointer to check if failure is due to
+                                some condtions
+      method(obj): operation for which we are checking
+      err(obj): not needed
+
+    Returns: bool
+    """
     if not self._objects._objectscluster:
       debug_print("ObjectsCluster obj is None. Skipping condition %s check for "
                   "%s"%(condition_for_retry.__name__, method.__name__))
@@ -11245,6 +11715,38 @@ class OpExecutor():
                       failure_recorded_time, rsize, ignore_errors,
                       force_ignore_failures, retry_count, retry_delay,
                       api_etime, force, i, **kwargs):
+    """
+    this method does some checks i.e. whether to ignore the error, whether to
+    raise exception right away, whether the error is related to data corruption
+    etc... and after all the checks it will record the api execution and then
+    sleep for some time(retry_delay) and returns the None if all the checks were
+    done
+
+    Args:
+      method(obj): operation name
+      err(obj): error object
+      set_exit_marker_on_failure(bool,[str]): either bool or list of errors
+      rcount(int): number of objects involved in operation
+      failure_recorded_time(date): time of the failure of given retry
+      rsize(int): size of all the objects involved in operation
+      ignore_errors([str]): list of errors to ignore
+      force_ignore_failures(bool): flag to ignore all errors
+      retry_count(int): maximum number of retries allowed
+      retry_delay(int): time in seconds
+      api_etime(date): total execution time of the api
+      force(bool): flag to pass to _detect_data_corruption method
+      i(int): number of failed attempt for the operation
+      kwargs(dict): any other arguments
+
+    Returns: {} or None
+      if the error needs to be ignored then return {}, else if all the checks
+      doen then return None
+
+    Raises: Exception
+      in case of _may_be_set_exit_marker returns False then it will raise the
+      exception and also _detect_data_corruption will also raise the exception
+      if corruption detected
+    """
     self._may_be_track_error_stack(method.__name__, err, **kwargs)
     expected_failure = False
     opdetails = err.opdetails if hasattr(err, "opdetails") else None
@@ -11279,6 +11781,15 @@ class OpExecutor():
     return None
 
   def _may_be_track_error_stack(self, method, err, **kwargs):
+    """
+    this method will log the error stack if error is in the
+    _kwargs["errors_to_dump_stack_strace"]
+
+    Args:
+      method(str): operation name
+      err(obj): error object
+      kwargs(dict): all the other arguments needed
+    """
     op_err_msg = ""
     if hasattr(err, "opdetails"):
       op_err_msg = str(err.opdetails.get("ErrMsg"))
@@ -11291,6 +11802,12 @@ class OpExecutor():
               %(method, prnt_args, format_exception()))
 
   def _remove_large_items_from_dict(self, **kwargs):
+    """
+    removes the large items like large lists, large dicts, large strings and
+    other large objects from kwargs and returns new dict
+
+    Returns: dict
+    """
     prnt_args = {}
     for k,v in kwargs.iteritems():
       if k in ("Body","data", "Delete", "Deleted", "DeleteMarkers"):
@@ -11313,6 +11830,21 @@ class OpExecutor():
 
   def _may_be_execute_op(self, method, i, rcount, failure_recorded_time,
                          rsize, err=None, **kwargs):
+    """
+    executes the method,if successful, collects the response, records the
+    execution detail in _local_records and returns the response
+
+    Args:
+      method(obj): method to execute
+      i(int): number of unsuccessful attempts executing this api request
+      rcount(int): no of objects involved in given operation
+      failure_recorded_time(date): it is the time of the last failed request
+      rsize(int): total size of all the objects included in operation
+      err(obj): error object from last failed attempt
+      kwargs(dict): all the other arguments needed
+
+    Returns: dict
+    """
     stime, res = self._execute_api(method, **kwargs)
     res_data = {}
     if isinstance(res, dict):
@@ -11331,6 +11863,34 @@ class OpExecutor():
   def _may_be_set_exit_marker(self, error, errors_to_exit, opname, total_count,
                               fail_count, failure_time, rsize, ignored_failure,
                               expected_failure_count, err):
+    """
+    this methods decides whether we want to continue with retries(and after the
+    sufficient retries if the execution still fails, the _execute method will
+    set the exit_marker and raise the error) so if this method returns True,
+    the execution will continue with retry, otherwise the _process_op_err will
+    raise the exception and the caller(from UploadObjs class) will handle it the
+    way it wants, if it is returning false, it will record the api execution
+    details first and then returns
+
+    Args:
+      error(obj): this is a redundant parameter with last argument(err), so we
+                  will remove it
+      errors_to_exit(bool,list): this arguments decides the method output, if
+                                 a. its a list and err.message is in the list
+                                     then it will return false, else True
+                                 b. its a bool, False, then method will return
+                                    False, else True
+      opname(str):  operation name
+      total_count(int): no of objects involved in given operation
+      fail_count(int): no of times given operation failed
+      failure_time(time): time of failure if operation failed or None
+      rsize(int): total size of all the objects involved
+      ignored_failure(bool): True, if we want to ignore the failure
+      expected_failure_count(int): 1 if currently EI or upgrade is in progress
+      err(obj): error object
+
+    Returns: bool
+    """
     if isinstance(errors_to_exit, bool):
       if not errors_to_exit:
         expected_failure_count += 1
@@ -11354,6 +11914,27 @@ class OpExecutor():
   def _may_be_ignore_error(self, error, ignore_errors, opname, bucket, key, err,
                  total_count, fail_count, failure_time, rsize, ignored_failure,
                  force_ignore_failures):
+    """
+    it will return True if given error is in the list ignore_errors or
+    force_ignore_failures is True, else False
+
+    Args:
+      error(obj): redundant(of no use)
+      ignore_errors([str]): list of errors to ignore
+      opname(str): operation name
+      bucket(str): bucket name for given operation
+      key(str): object name for given operation
+      err(obj): error object
+      total_count(int): no of objects involved in given operation
+      fail_count(int): no of times given operation failed
+      failure_time(time): time of failure if operation failed or None
+      rsize(int): total size of all the objects involved
+      ignored_failure(bool): True, if we want to ignore the failure
+      force_ignore_failures(bool): True, if we want to ignore failure for any
+                                   kind of error, else False
+
+    Returns: bool
+    """
     if force_ignore_failures:
       self._record_api_execution(opname=opname, total_count=total_count,
                   fail_count=fail_count, failure_time=failure_time, rsize=rsize,
@@ -11373,6 +11954,24 @@ class OpExecutor():
 
   def _detect_data_corruption(self, method, current_count, retry_count,
                               retry_delay, err, api_etime, force, **kwargs):
+    """
+    this method will log the error message with every detail about the operation
+    and iff the reason of error is data corruption, it will raise the Exception
+
+    Args:
+      method(str): operation name
+      current_count(int): no of times operation already failed
+      retry_count(int): maximum no of retries allowed
+      err(obj): error object
+      api_etime: total execution time of given method
+      force(bool): this is a flag to indicate that operation will be executed
+                   by _execute method even if exit-marker is already set, its
+                   needed here just for logging purpose
+      kwargs(dict): all the other arguments needed in the method
+
+    Raises: Exception
+      only if exception is bcz of data corruption
+    """
     prnt_args = self._remove_large_items_from_dict(**kwargs)
     prnt_args.update({"force":force,"time_to_exit":self._objects._time_to_exit})
     ndel = 0
@@ -11404,6 +12003,11 @@ class OpExecutor():
       raise err
 
   def _get_extended_msg_for_ei(self):
+    """
+    Returns the string indicating whether EI or Upgrade is in progress
+
+    Returns: str
+    """
     msg = ""
     if self._objects._expect_failure_during_ei:
       msg += ", EI In Progress : True, Component Under EI : %s"%(
@@ -11414,10 +12018,32 @@ class OpExecutor():
     return msg
 
   def _get_pst_time(self):
+    """
+    returns the current pst_time
+
+    Returns: time obj
+    """
     tz = timezone('America/Los_Angeles')
     return datetime.fromtimestamp(int(time()), tz).isoformat()
 
   def _execute_api(self, method, **kwargs):
+    """
+    it will execute api, collects the response, add some details in
+    it and returns the response
+
+    Args:
+      method(obj): function pointer to execute
+      kwargs(dict): kwargs to pass to method
+
+    Returns: dict (returning start time is of no use, will remove it in future from code)
+      response from execution and it also has properties execution_time and opdetails
+      opdetails has more info like operation start_time, end_time, total execution time, oc detials.. etc
+
+    Raises: botocore.exceptions.ClientError or Exception
+    it also adds property opdetails which is same as opdetails as response
+    except for the case of delete objects, in which case it will raise plain
+    Exception object
+    """
     stime=time()
     opdetails = {"PST-STime" : self._get_pst_time(),
                  "ErrCode":None, "ErrMsg":None}
@@ -11465,6 +12091,11 @@ class OpExecutor():
     return stime, res
 
   def _get_oc_details(self, err, res=None):
+    """
+    returns the object-controller details from either error or response
+
+    Returns: str
+    """
     oc = None
     if res and type(res) is dict:
       oc  = res.get("ResponseMetadata", {}).get("HTTPHeaders",
@@ -11484,6 +12115,15 @@ class OpExecutor():
       pass
 
   def _get_err_msg_code(self, err_resp, err):
+    """
+    returns the tuple of error messages and code
+
+    Args:
+      err_resp(obj): err.response in case of botocore exception object
+      err(obj): error object
+
+    Returns: tuple: (ntnxerr, errcode, errmsg)
+    """
     httpcode, errcode, errormsg = "", "", ""
     nxerror, errreason, strerror, errno = "", "", "", ""
     if hasattr(err, "response") and isinstance(err.response, dict):
@@ -11528,6 +12168,16 @@ class OpExecutor():
     return nxerror, errcode, errmsg
 
   def _get_endpoint(self, method, method_output, err=None):
+    """
+    it will return the endpoint used by given method
+
+    Args:
+      method(obj): function pointer
+      method_output(dict): response from method execution
+      err(dict): in case of error response from method execution
+
+    Returns: string
+    """
     if method.__name__.startswith("s3_"):
       if isinstance(method_output, dict) and "s3_endpoint" in method_output:
         return method_output["s3_endpoint"]
@@ -11542,6 +12192,17 @@ class OpExecutor():
 
   def _track_result(self, bucket, obj, opname, retry_count, failure_time,
                     err, **kwargs):
+    """
+    it will append the error details in self._error_fh_tracker file
+
+    Args:
+      bucket(str): bucket name
+      obj(str): object name
+      opname(str): operation name
+      retry_count(int): no of retries already done
+      failure_time(date): failed time
+      err(obj): error object
+    """
     msg = "%s : %s(%s), Opname: %s, RetryCount: %s, FailureTime: %s,Err : "\
           "(%s) %s\n"%(failure_time, bucket, obj, opname, retry_count,
                        failure_time, type(err), err)
@@ -11550,6 +12211,24 @@ class OpExecutor():
   def _record_api_execution(self, opname, total_count, fail_count, failure_time,
                rsize, ignored_failure=False,expected_failure_count=0, err=None,
                apires=None):
+    """
+    after the api execution is done here we will add its detail in
+    self._local_records(which will update the _total_ops_recorded periodically)
+    if the execution was succesfull in first attempt(i.e. failure_time is None)
+    else in case of failure it will directly updates the _total_ops_recorded
+    without pushing it to _local_records
+
+    Args:
+      opname(str): api_operation executed
+      total_count(int): no of objects involved in given operation
+      fail_count(int): no of times given operation failed
+      failure_time(time): time of failure if operation failed or None
+      rsize(int): total size of all the objects involved
+      ignored_failure(bool): True, if we ignored the failure
+      expected_failure_count(int): 1 if currently EI or upgrade is in progress
+      err(obj): error object in case of failure
+      apires(dict): response of given api
+    """
     if opname == "s3_head_object" and apires and not err:
       objsize = apires["ContentLength"]
       if apires["ResponseMetadata"]["HTTPHeaders"].get(
@@ -11575,6 +12254,16 @@ class OpExecutor():
     #  self._flush_records()
 
   def _flush_records(self, force=True):
+    """
+    this method will be called by _log_stats of UploadObjs method periodically
+    to flush the self._local_records and append it to _total_ops_recorded
+
+    Args:
+      force(bool): if True, it will directly flush the records without checking
+                   last_update_time, else it checks the last_update_time and if
+                    Constants.OP_EXECUTOR_FLUSH_INTERVAL time is passed then
+                    only it will start flushing
+    """
     if not force:
       is_flush_time = (time()-self._last_update_time
                                       ) > Constants.OP_EXECUTOR_FLUSH_INTERVAL
@@ -11601,6 +12290,13 @@ class OpExecutor():
 
   def _update_results(self, opname, total_count, fail_count, failure_time,
                 rsize, ignored_failure, expected_failure_count, err, opdetails):
+    """
+    updating the _total_ops_recorded[opname] fields: failcount,
+    Last.Recorded.Time, ignored_failure_count, expected_failure_count
+    and also some of the direct fields of _total_ops_recorded: count, size,
+    totalcount, totalfailure, totalfailureignored, expected_failure_count
+    and also errors, endpoint_stats, object-controller of _total_ops_recorded
+    """
     if opname not in self._objects._total_ops_recorded:
       self._objects._total_ops_recorded[opname] = {"failcount" : fail_count,
                       "Last.Recorded.Time":failure_time,
@@ -11633,6 +12329,16 @@ class OpExecutor():
                             1 if ignored_failure else 0, expected_failure_count)
 
   def _update_error_details_in_db(self, opdetails, opname, failure_time, err):
+    """
+    it will update the total_ops_recorded['errors'] in db accroding to
+    error_code
+
+    Args:
+      opdetails(dict): operation details
+      opname(str): operation name
+      failure_time(date): time
+      err(obj): not needed
+    """
     if self._objects._time_to_exit:
       #ERROR("Skipping Error updation for %s due to exit marker found"%opname)
       return
@@ -11662,6 +12368,18 @@ class OpExecutor():
 
   def _update_endpoint_details(self, opname, opdetails, total_count, fail_count,
                                totalfailureignored, expected_failure_count):
+    """
+    it will update the _total_ops_recorded["endpoint_stats"] with result of
+    current api execution
+
+    Args:
+      opname(str): api_operation executed, not needed
+      opdetails(dict): operation details
+      total_count(int): no of objects involved in given operation
+      fail_count(int): no of times given operation failed
+      totalfailureignored(int): 1, if we ignored the failure else 0
+      expected_failure_count(int): 1 if currently EI or upgrade is in progress
+    """
     if not opdetails:
       return
     endpoint = opdetails.get("endpoint")
@@ -11678,6 +12396,13 @@ class OpExecutor():
                                           "expected"] += expected_failure_count
 
   def _update_oc_details(self, opname, opdetails):
+    """
+    it will update the object-controller stats which served this api request
+
+    Args:
+      opname(str): operation name
+      opdetails(dict): operation details
+    """
     if not opdetails or "object-controller" not in opdetails:
       return
     pod = opdetails["object-controller"]["pod"]
@@ -11692,6 +12417,17 @@ class OpExecutor():
                                     opname][pod]["success"] += 1
 
   def _get_error_msg(self, error):
+    """
+    it will look for key of self._errmsp in error(if the key is sbustring
+    in error), if its present then returns the respective value as message
+    if it doesn't find any key, it will returns the error message upto 100
+    characters
+
+    Args:
+      error(str): error message
+
+    Returns: str
+    """
     for err, msg in self._errmsp.iteritems():
       if err in error:
         return msg
