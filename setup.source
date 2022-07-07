@@ -1,0 +1,191 @@
+# Copyright (c) Nutanix Inc. 2022
+#
+# Author: isshwar.makudes@nutanix.com
+
+SUCCESS=0
+FAIL=1
+MY_NAME="setup.source"
+CURRENT_DIR=`pwd`
+APP="objects_scale"
+APP_VENV="${CURRENT_DIR}/my_${APP}_virtual_env"
+TEMP=/tmp
+
+function app_print_usage {
+    echo -n "
+Usage:
+  source setup.source [options]
+    -p|--venv_path <path to virtual environment>
+    -h|--help
+"
+}
+
+function app_process_options {
+    while [[ $# -gt 0 ]]
+    do
+        # echo "$# : $@"
+        opt="$1"
+        case $opt in
+            -p | --venv_path)
+                venv_path=$2
+                if [ ! -e "$venv_path" ]
+                then
+                    echo -n "Option (-p | --venv_path): Path doesn't exist '$venv_path'"
+                    app_print_usage
+                    return 1
+                fi
+                APP_VENV=${venv_path}/my_${APP}_virtual_env
+                shift;;
+            -h | --help)
+                app_print_usage
+                return 1;;
+            *)
+                echo -n "Invalid option: $opt"
+                app_print_usage
+                return 1;;
+        esac
+    shift
+    done
+    return $SUCCESS
+}
+
+function app_print_header {
+    echo "========================================="
+    echo "$@"
+    echo "========================================="
+}
+
+function app_echo {
+    echo
+    echo "==> $@"
+}
+
+function app_execute_command {
+    echo "Executing: $@"
+    eval $@
+    rc=$?
+    echo "Done"
+    echo
+    return $rc
+}
+
+function app_check_command_installed {
+    app_echo "Checking if $1 is installed"
+    app_execute_command "type $1 &> /dev/null"
+    if [ $? -ne $SUCCESS ]; then
+        echo "$1 is not installed."
+        return $FAIL
+    fi
+    echo "$1 is installed."
+    return $SUCCESS
+}
+
+function app_install_pip {
+    app_check_command_installed curl
+    if [ $? -ne $SUCCESS ]; then
+        echo "$1 is not installed."
+        return $FAIL
+    fi
+
+    app_echo "Downloading get-pip.py"
+    app_execute_command \
+        "curl https://bootstrap.pypa.io/pip/2.7/get-pip.py -o $TEMP/get-pip.py"
+
+    app_echo "Installing pip using sudo (please type password if prompted)"
+    app_execute_command "sudo python $TEMP/get-pip.py"
+    if [ $? -ne $SUCCESS ]; then
+        echo "Could not install pip"
+        return $FAIL
+    fi
+    return $SUCCESS
+}
+
+function app_install_virtualenv {
+    app_echo \
+        "Installing virtualenv using sudo (please type password if prompted)"
+    app_execute_command "sudo pip install -U virtualenv"
+    if [ $? -ne $SUCCESS ]; then
+        echo "Could not install virtualenv"
+        return $FAIL
+    fi
+    return $SUCCESS
+}
+
+function app_check_requirements {
+    app_print_header "Checking if requirements are met"
+    requirements_met=$SUCCESS
+
+    # Check if pip is installed and install if necessary
+    app_check_command_installed pip || app_install_pip
+    if [ $? -ne $SUCCESS ]; then
+        requirements_met=$FAIL
+    fi
+
+    # Check if virtualenv is installed and install if necessary
+    app_check_command_installed virtualenv || app_install_virtualenv
+    if [ $? -ne $SUCCESS ]; then
+        requirements_met=$FAIL
+    fi
+
+    if [ $requirements_met -ne $SUCCESS ]; then
+        echo "Requirements are not met."
+        echo
+        return $FAIL
+    else
+        echo "Requirements are met."
+        echo
+        return $SUCCESS
+    fi
+}
+
+function app_setup {
+    app_print_header "Setting up environment variables"
+    PYTHONDONTWRITEBYTECODE=1
+    LC_ALL=en_US.UTF-8
+
+    export PYTHONDONTWRITEBYTECODE LC_ALL
+    echo "Done"
+    echo
+
+    # Remove all *.pyc files
+    app_print_header "Removing all *.pyc files"
+    app_execute_command "find $CURRENT_DIR -name \"*.pyc\" -exec rm -f {} \;"
+
+    # Create virtual environment
+    app_print_header "Creating virtual environment at $APP_VENV"
+    app_execute_command "virtualenv $APP_VENV"
+    if [ $? -ne $SUCCESS ]; then
+        echo "Could not create virtual environment"
+        return $FAIL
+    fi
+
+    # Activate virtual environment
+    app_print_header "Activating virtual environment"
+    app_execute_command "source $APP_VENV/bin/activate"
+
+    app_print_header "Installing requirements inside virtual environment"
+
+    app_execute_command "pip install -r $CURRENT_DIR/requirements.txt"
+    if [ $? -ne $SUCCESS ]; then
+        echo "Could not install all the requirements"
+        deactivate
+        return $FAIL
+    fi
+}
+
+function app_execute_main {
+    # Check if the script is run from app base directory
+    if [ ! -f $CURRENT_DIR/requirements.txt ]; then
+        echo "Script needs to be sourced from $APP base directory."
+
+    # Check if the script is sourced or not
+    elif [ $0 '==' $MY_NAME ]; then
+        echo "Script must be sourced. Use '. $MY_NAME' or 'source $MY_NAME'"
+
+    # Setup app
+    else
+        export LC_ALL=C
+        app_check_requirements && app_setup
+    fi
+}
+
+app_process_options $@ && app_execute_main

@@ -1,0 +1,165 @@
+class Constants(object):
+  # TODO: Trim unwanted constants
+
+  OBJECTS_SCALE_REPO = "https://github.com/isshwar-makudes/ObjectsScaleAutomation.git"
+  RELATIVE_LOGDIR_PATH = "logs"
+
+  MSG_TYPE_DEBUG = "debug"
+  MSG_TYPE_ERROR = "error"
+  MSG_TYPE_WARN = "warn"
+
+  REMOTE_POPS_QUOTA = "remote_execution"
+  TEST_NOT_STARTED = "NotStarted"
+  TEST_STOPPING = "Stopping"
+  TEST_NOT_RUNNING = "NotRunning"
+  TEST_STARTING = "Starting"
+  TEST_RUNNING = "Running"
+  TEST_FAILED = "Failed"
+  TEST_COMPLETED = "Completed"
+  CACHE_DISCARD_FILENAME = "dicarded_cache.json"
+
+  MSP_DEFAULT_NAMESPACE = "default"
+  MSP_POD_RUNNING_STATE = "Running"
+
+  OBJECTS_ATLAS_SERVICE = "poseidon-atlas"
+  OBJECTS_MS_SERVICE = "ms"
+
+  ATLAS_SCAN_RUNNING_STATUS = "Running"
+  ATLAS_FULL_SCAN = "full"
+  ATLAS_PARTIAL_SCAN = "partial"
+  ATLAS_SELECTIVE_SCAN = "selective"
+  CURATOR_FULL_SCAN = "curator_full_scan"
+  CURATOR_PARTIAL_SCAN = "curator_partial_scan"
+  ATLAS_MASTER_POD = "atlas_master"
+  ATLAS_WORKER_POD = "atlas_worker"
+  ATLAS_DEFAULT_SCAN_TIMEOUT = 24*3600
+
+  ATLAS_WEB_PAGE = 'http://0:7103'
+  ATLAS_MASTER_WEBPAGE = '%s/master/api/client/StartCuratorTasks'%ATLAS_WEB_PAGE
+  ATLAS_PARTIAL_SCAN_TRIGGER_PAGE = '%s?task_type=21'%ATLAS_MASTER_WEBPAGE
+  ATLAS_FULL_SCAN_TRIGGER_PAGE = '%s?task_type=22'%ATLAS_MASTER_WEBPAGE
+  ATLAS_SELECTIVE_SCAN_TRIGGER_PAGE = '%s?task_type=23'%ATLAS_MASTER_WEBPAGE
+
+  READ_TYPE_FULL_READ = "full_read"
+  READ_TYPE_RANGE_READ = "range_read"
+  NFS_READ_TYPE_FULL_READ = "full_read"
+  NFS_READ_TYPE_RANGE_READ = "range_read"
+
+  EI_SERVICE_UI="ui"
+  EI_SERVICE_ZK="zk"
+  EI_SERVICE_MS="ms"
+  EI_SERVICE_CDP="cdp"
+  EI_SERVICE_ALL="all"
+  EI_COMPONENT_POD="pod"
+  EI_COMPONENT_NODE="node"
+  EI_SERVICE_ATLAS="atlas"
+  EI_SERVICE_OBJECT="object"
+  EI_COMPONENT_SERVICE="service"
+  EI_COMPONENT_MSP_SERVICE="msp_service"
+  EI_COMPONENT_INFRA_SERVICE = "infra_service"
+
+  EI_OPERATION_ON="on"
+  EI_OPERATION_OFF="off"
+  EI_OPERATION_RESET="reset"
+  EI_OPERATION_PAUSE="pause"
+  EI_OPERATION_REBOOT="reboot"
+  EI_OPERATION_RESETALL="resetall"
+  EI_OPERATION_SHUTDOWN="shutdown"
+  EI_OPERATION_REBOOTALL="rebootall"
+  EI_OPERATION_RESTART_POD="restart"
+  EI_OPERATION_SERVICE_H_EXIT="h_exit"
+  EI_OPERATION_REBOOT_CVM="reboot_cvm"
+  EI_OPERATION_REBOOT_HOST="reboot_host"
+  EI_OPERATION_STOP_STARGATE="stop_stargate"
+  EI_OPERATION_REBOOT_ALL_CVM="reboot_all_cvm"
+  EI_OPERATION_STOP_CASSANDRA="stop_cassandra"
+  EI_OPERATION_REBOOT_ALL_HOST="reboot_all_host"
+  EI_OPERATION_START_STARGATE="restart_stargate"
+  EI_OPERATION_START_CASSANDRA="restart_cassandra"
+  EI_OPERATION_RESTART_STARGATE="restart_stargate"
+  EI_OPERATION_RESTART_CASSANDRA="restart_cassandra"
+
+  EI_RECOVERY_TIME_FOR_POD = 120
+  EI_RECOVERY_TIME_DEFAULT = 121 #Just have unique timeout for default
+  EI_RECOVERY_TIME_FOR_SERVICE = 60
+  EI_RECOVERY_TIME_FOR_MSP_POWERCYCLE = 720
+  EI_RECOVERY_TIME_FOR_REBOOT_HYP_HOST = 900
+  EI_RECOVERY_TIME_FOR_REBOOT_ALL_HOST_CVM = 1800
+
+  LOCK="lock"
+  UNLOCK="unblock"
+
+  STATIC_STATS_FILE="/tmp/stats"
+  STATIC_ERROR_FILE="/tmp/stats.err"
+  STATIC_MEM_TOP_FILE='/tmp/mem_top'
+  EXIT_MARKER_FILE="/tmp/exit_marker"
+  STATIC_RECORDS_FILE="/tmp/records.json"
+  STATIC_STATS_HTML_FILE="/tmp/stats.html"
+  STATIC_TESTCONFIG_FILE="/tmp/testconfig.json"
+  STATIC_BUCKET_INFO_FILE="/tmp/bucket_info.json"
+  WEBSERVER_JSON_FILE_LOCATION="/tmp/stats.json"
+  STATIC_ALL_STATS_RECONRDS_FILE="/tmp/all_stats.json"
+  STATIC_ALL_CLIENTS_RECORDS_FILE="/tmp/clients_records.log"
+  STATIC_FINAL_RECONRDS_FILE="/tmp/final_records.json"
+
+  FEXST = "File exists"
+  IAD = "Is a directory"
+  NAD = "Not a directory"
+  ROFS = "Read-only file system"
+  DORB = "Device or resource busy"
+  ICDL = "Invalid cross-device link"
+
+  NFSFIO_WORKLOAD="nfsfio"
+  NFSFIO_WL_DEFAULT_PREFIX="fio"
+  NFS_WRITE_ETAG_IDENTIFIER="nfs"
+  NFS_FILE_ETAG_IDENTIFIER="-nfs"
+  NFSVDBENCH_WORKLOAD="nfsvdbench"
+  DELETE_WL_DEFAULT_PREFIX="delete"
+  NFSWRITE_WL_DEFAULT_PREFIX="keynfs"
+  NFSCOPY_WL_DEFAULT_PREFIX="nfscopy"
+  SPARSE_FILE_DEFAULT_PREFIX="sparse"
+  NFS_OVERWRITE_ETAG_IDENTIFIER="-s3nfs"
+  NFSVDBENCH_WL_DEFAULT_PREFIX="vdbench"
+  NFSDELETE_WL_DEFAULT_PREFIX="nfsdelete"
+  NFSOWRITE_WL_DEFAULT_PREFIX="nfsowrite"
+  NFSRENAME_WL_DEFAULT_PREFIX="nfsrename"
+
+  MAGIC_BYTE="_"
+  SUB_BLOCK_SIZE=1024
+  WEBSERVER_PORT=37000
+  OP_EXECUTOR_FLUSH_INTERVAL = 35
+  COMPRESSEABLE_DATA_SIZE = 8*1024
+  LOCAL_STATIC_DATA_SIZE = 1024*1024
+  ZERO_DATA_ETAG='d41d8cd98f00b204e9800998ecf8427e'
+
+  OBJ_VERSION="_V3_"
+  LEGACY_OBJ_VERSION="_V2_"
+  OBJ_IDN_FOR_S3COPY="_S3CP_"
+  OBJ_IDN_FOR_NFSCOPY="_NCP_"
+  NFS_OBJ_IDENTIFIER = "_NFS_"
+  OBJ_IDN_FOR_NFSRENAME="_NRN_"
+  STATIC_DATA_IDENTIFIER = "_SD_"
+  ZEROBYTE_OBJ_IDENTIFIER="_ZRO_"
+  MULTIPART_OBJ_IDENTIFIER="_MLT_"
+  DEFAULT_TAG_FOR_EXPIRY = "tagexp=tagvalue"
+
+  POSEIDON_BUCKETINFO_MAP = "PoseidonBucketInfoMap"
+  KPOSEIDON_BUCKETINDEX_MAP = "kPoseidonBucketIndexMap"
+  POSEIDON_BUCKETLIST_MAP = "PoseidonBucketListMap"
+  POSEIDON_VDISKINFO_MAP = "PoseidonVdiskInfoMap"
+  POSEIDON_OPENVDISKINFO_MAP = "PoseidonOpenVdiskInfoMap"
+  POSEIDON_REGIONINFO_MAP = "PoseidonRegionInfoMap"
+  POSEIDON_BUCKETSTATS_MAP = "PoseidonBucketStatsMap"
+  POSEIDON_BUCKET_REPLICATIONINFO_MAP = "PoseidonBucketReplicationInfoMap"
+  POSEIDON_OBJECT_REPLICATIONINFO_MAP = "PoseidonObjectReplicationInfoMap"
+  POSEIDON_OBJECT_TAGINFO_MAP = "PoseidonObjectTagInfoMap"
+  POSEIDON_VNODESTATS_MAP = "PoseidonVnodeStatsMap"
+  POSEIDON_DIRECTORYINFO_MAP = "PoseidonDirectoryInfoMap"
+  POSEIDON_LIFECYCLE_POLICYINFO_MAP = "PoseidonLifecyclePolicyInfoMap"
+  POSEIDON_GLOBAL_REGIONINFO_MAP = "PoseidonGlobalRegionInfoMap"
+  POSEIDON_BUCKET_TAGINFO_MAP = "PoseidonBucketTagInfoMap"
+
+  COMPACTION_STATUS_RUNNING = "running"
+  COMPACTION_STATUS_COMPLETED = "completed"
+  COMPACTION_STATUS_PENDING = "pending"
+

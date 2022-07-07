@@ -1,40 +1,45 @@
 from time import sleep, time
 from threading import Thread, RLock
 from Queue import Queue
+from copy import deepcopy
 
 from lib.generic.logger import ERROR, INFO
+from lib.utils import get_random_string
 
 class DynamicExecution():
-  def __init__(self, threadpoolsize=10, timeout=7200, quotas=None,
-        strict_quota_workers=["nfsdelete", "nfsrename", "delete", "nfsowrite"]):
+  default_quotas = {"generic": {"perc":100},
+                    "read": {"perc":0},
+                    "write": {"perc":0},
+                    "delete": {"perc":0}
+                   }
+  def __init__(self, threadpoolsize=10, timeout=7200, quotas=None):
     self._poolsize = threadpoolsize
     self._timeout = timeout
-    self._strict_quota_workers = strict_quota_workers
-    self._default_quotas = {"generic":{"perc":100},
-              "read":{"perc":0},
-              "write":{"perc":0},
-              "delete":{"perc":0}
-              }
     if not quotas:
-      quotas = self._default_quotas
+      quotas = deepcopy(self.default_quotas)
     self._quotas = quotas
     self._queues = {}
     self._time_to_exit = False
     self._workers = []
+    self._results = {}
     self._lock = RLock()
     self._init_workers()
 
-  def add(self, target, **kwargs):
+  def add(self, target, custom=None, **kwargs):
     timeout = kwargs.pop("timeout", self._timeout)
     quota_type = kwargs.pop("quota_type")
     queue = self._queues[quota_type]
+    work_id = get_random_string()
     while timeout > 0:
       if self._time_to_exit:
         INFO("Exit is called, marking %s as no-op, Type : %s"
              %(target, quota_type))
         return
       try:
-        queue.put({"target":target, "kwargs":kwargs}, timeout=1)
+        kwargs["__work_id"] = work_id
+        task = {"target":target, "kwargs":kwargs}
+        queue.put(task, timeout=1)
+        self._results[work_id] = {"task": task, "custom": custom}
         return
       except:
         pass
@@ -101,6 +106,18 @@ class DynamicExecution():
 
   def size(self):
     return self._poolsize
+
+  def consume_task_result(self, work_id):
+    return del(self._results[work_id])
+
+  def consume_results(self, check_results=True):
+    all_results = self._results
+    self._results = {}
+    if check_results:
+      for work_id, result in all_results.iteritems():
+        if result.get("exception", None):
+          raise Exception("Work %s has failed: %s" % (work_id, result))
+    return all_results
 
   def _assign_workers(self):
     total_workers = 0
@@ -185,16 +202,16 @@ class DynamicExecution():
         if retries == 0:
           raise
 
-class worker:
-  def __init__(self, pe, worker_type, worker_name):
-    self._pe = pe
+class worker(object):
+  def __init__(self, manager, worker_type, worker_name):
+    self._manager = manager
     self._type = worker_type
     self._is_active = True
     self._name = worker_name
     INFO("Initializing worker %s, for workload : %s"%(self._name, self._type))
 
   def execute(self):
-    while not self._pe._time_to_exit:
+    while not self._manager._time_to_exit:
       task = self._get_task()
       if not task:
         continue
@@ -208,19 +225,22 @@ class worker:
   def _execute_task(self, task):
     target = task.pop("target")
     kwargs = task.pop("kwargs")
+    work_id = kwargs.pop("__work_id")
+    result = self._manager._results[work_id]
     try:
-      target(**kwargs)
+      result["ret_value"] = target(**kwargs)
     except Exception as err:
+      result["exception"] = err
       ERROR("Worker %s (type : %s), hit exception while executing task : %s,"
             "Err : (%s) %s, Trace : %s"%(self._name, self._type, target,
                                           type(err), err, format_exc()))
       self._is_active = False
-      if not self._pe._time_to_exit:
+      if not self._manager._time_to_exit:
         raise
 
   def _get_task(self):
     try:
-      return self._pe._get_task(self._type)
+      return self._manager._get_task(self._type)
     except Exception as err:
       if "Timeout" in err.message:
         return None

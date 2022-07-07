@@ -34,12 +34,13 @@ def setup_logging(abs_log_file_path, use_multi_files=True,
     log_level (str): The minimum log level severity that should be considered
                      for logging.
                      Defaults to 'DEBUG'
-    rotate_info(dict): Contains details about log_rotation.
+    rotate_info(dict): Contains details about log_rotation. log_rotation will be
+                       enabled only if this parameter is specified.
       Keys:
        sized_log_rotate(int) - Size in MB after which log rotates.
        timed_log_rotate(int) - Time in seconds after which log rotates.
        tar_rotated_logs(bool) - Flag to set whether rotated logs needs to be
-          compressed and tarred.
+          compressed and tarred. Default: False
   """
   log_level = getattr(logging, log_level)
   # Custom variables
@@ -104,7 +105,7 @@ def __get_rotate_handler(log_file_path, rotate_info):
        sized_log_rotate(int) - Size in MB after which log rotates.
        timed_log_rotate(int) - Time in seconds after which log rotates.
        tar_rotated_logs(bool) - Flag to set whether rotated logs needs to be
-          compressed and tarred.
+          compressed and tarred. Default: False
   Returns:
     logging.FileHandler(object): TimedRotatingFileHandler or
                                  RotatingFileHandler based on rotate_info.
@@ -113,14 +114,14 @@ def __get_rotate_handler(log_file_path, rotate_info):
     fh = CustomTimedRotatingFileHandler(
       filename=log_file_path, when='S',
       interval=int(rotate_info['timed_log_rotate']),
-      tar_rotated_logs=rotate_info['tar_rotated_logs']
+      tar_rotated_logs=rotate_info.get('tar_rotated_logs', False)
     )
   else:
     # size passed as MBs
     size = int(rotate_info['sized_log_rotate']) * 1024 * 1024
     fh = CustomRotatingFileHandler\
       (filename=log_file_path, maxBytes=size,
-       tar_rotated_logs=rotate_info['tar_rotated_logs'])
+       tar_rotated_logs=rotate_info.get('tar_rotated_logs', False))
   return fh
 
 def __get_formatter():
