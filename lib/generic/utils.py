@@ -4,13 +4,17 @@ import json
 import re
 import socket
 import time
+import subprocess
+from dateutil import parser as dateparser
+
 from paramiko import SSHClient, AutoAddPolicy, MissingHostKeyPolicy
+from sys import stdout
 
 from lib.exceptions import SSHCommandExecutionFailed
 from lib.generic.logger import INFO, ERROR, DEBUG
 
 def sleep(seconds):
-  for remaining in xrange(seconds, 0, -1):
+  for remaining in range(seconds, 0, -1):
     stdout.write("\r")
     stdout.write("{:2d} seconds remaining.".format(remaining))
     stdout.flush()
@@ -43,8 +47,8 @@ def convert_random_bool(item):
     return item
   return convert_bool(item)
 
-def convert_to_datetime(self, datestr):
-    if isinstance(datestr, str) or isinstance(datestr, unicode):
+def convert_to_datetime(datestr):
+    if isinstance(datestr, str):
       datestr = "%s"%(datestr.strip())
       return dateparser.parse(datestr)
     return datestr
@@ -133,14 +137,14 @@ def _remote_exec(hostname, cmd, username, password, port, timeout, background,
   raise SSHCommandExecutionFailed(msg, out=out, err=err)
 
 def debug_print(msg):
-  print datetime.datetime.now(), "(%s)"%inspect.stack()[1][3], msg
+  print(datetime.datetime.now(), "(%s)"%inspect.stack()[1][3], msg)
 
 # TODO: Use retries decorator
-def copy_remote_file_to_local(self, remoteip, remotefile, localfile,
+def copy_remote_file_to_local(remoteip, remotefile, localfile,
                 user="root", password="nutanix/4u", retries=3, retry_delay=30):
   for i in range(retries+1):
     try:
-      return self._copy_file_to_local(remoteip, remotefile, localfile, user,
+      return _copy_file_to_local(remoteip, remotefile, localfile, user,
                                       password)
     except Exception as err:
       ERROR("Failed to copy remote file %s:%s->%s, err : %s, retry_num  :%s"
@@ -149,11 +153,11 @@ def copy_remote_file_to_local(self, remoteip, remotefile, localfile,
         raise
     sleep(retry_delay)
 
-def copy_local_file_to_remote(self, remoteip, localfile, remotefile,
+def copy_local_file_to_remote(remoteip, localfile, remotefile,
                 user="root", password="nutanix/4u", retries=3, retry_delay=30):
   for i in range(retries+1):
     try:
-      return self._copy_file_to_remote(remoteip, localfile, remotefile, user,
+      return _copy_file_to_remote(remoteip, localfile, remotefile, user,
                                       password)
     except Exception as err:
       ERROR("Failed to copy local file %s->%s:%s, err : %s, retry_num  :%s"
@@ -162,7 +166,7 @@ def copy_local_file_to_remote(self, remoteip, localfile, remotefile,
         raise
     sleep(retry_delay)
 
-def _copy_file_to_remote(self, remoteip, localfile, remotefile, user,
+def _copy_file_to_remote(remoteip, localfile, remotefile, user,
                           password):
   ssh = SSHClient()
   ssh.load_system_host_keys()
@@ -213,3 +217,77 @@ def get_random_string(length=24):
   """
   import uuid
   return uuid.uuid4().hex[:length].lower()
+
+def get_vip_dsip(hostip, use_cluster_vip=False):
+  out, err = local_exec("nslookup %s"%(hostip))
+  fqdn = out.strip().split()[-1].split(".")
+  if use_cluster_vip:
+    hostname = fqdn.pop(0).split("-")
+  else:
+    hostname = [fqdn.pop(0)]
+  vip = hostname[0]+"-v1"
+  dsip = hostname[0]+"-v2"
+  vip_hostname = [vip] + fqdn
+  dsip_hostname = [dsip] + fqdn
+  #vip_hostname[0] = vip
+  #dsip_hostname[0] = dsip
+  vip_hostname = ".".join([i for i in vip_hostname if i])
+  dsip_hostname = ".".join([i for i in dsip_hostname if i])
+  INFO("Hostname %s, VIP-Hostname : %s, DSIPhostname : %s, VIP/DSIP : %s / %s"
+       %(hostname, vip_hostname, dsip_hostname, vip, dsip))
+  vip_ip = nslookup(vip_hostname)
+  dsip_ip = nslookup(dsip_hostname)
+  INFO("Host for VIP/DSIP : %s / %s"%(vip_ip, dsip_ip))
+  return vip_ip, dsip_ip
+
+def nslookup(hostname):
+  out, err = local_exec("nslookup %s"%(hostname))
+  return out.strip().split(":")[-1].strip()
+
+def local_exec(cmd, retry=0, retry_delay=30, ignore_err=None,
+               background=False):
+  out, err = None, None
+  count = -1
+  cmd = [i for i in cmd.split(" ") if i] if isinstance(cmd, str) else cmd
+  while count < retry:
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if background:
+      return p
+    out, err = p.communicate()
+    count += 1
+    if err:
+      if isinstance(ignore_err, bool) and ignore_err:
+        return out, err
+      if ignore_err and  any([e in err.strip() for e in ignore_err]):
+        return out, err
+      ERROR("Failed to execute cmd : %s, Error : %s, Retry Count : %s/%s"
+            %(cmd, err, count, retry))
+      sleep(retry_delay)
+  return out, err
+
+def write_to_file(data, filename, open_flag):
+  with open(filename, open_flag) as fh:
+    fh.write(str(data))
+
+# TODO: This method need to merge with execute_http_request
+def execute_rest_api_call(url, request_method,  data, timeout=120,
+           retry=0, retry_delay=30, username="admin", password="Nutanix.123"):
+  params = {"url":url, "headers":{"Content-Type": "application/json"},
+           "auth":(username, password), "verify":False,
+           "timeout":timeout}
+  if data is not None:
+    params["data"]=str(data)
+  retry += 1
+  msg = ""
+  while retry > 0:
+    res = request_method(**params)
+    if res.status_code < 300:
+      return res
+    msg = "Error while executing %s. Url : %s(U:%s, P:%s) , Error : %s "\
+          "(Code:%s)"%(request_method.__name__, url, username, password,
+                       res.content, res.status_code)
+    ERROR(msg)
+    retry -= 1
+    if retry>0: sleep(retry_delay)
+    continue
+  raise Exception(msg)
