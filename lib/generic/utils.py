@@ -4,10 +4,19 @@ import json
 import re
 import socket
 import time
+import requests
 from paramiko import SSHClient, AutoAddPolicy, MissingHostKeyPolicy
 
 from lib.exceptions import SSHCommandExecutionFailed
 from lib.generic.logger import INFO, ERROR, DEBUG
+
+class Operations(object):
+  SET_KEY = "SET_KEY"
+  GET_KEY = "GET_KEY"
+  DELETE_KEY = "DELETE_KEY"
+  ADD_TO_VALUE = "ADD_TO_VALUE"
+  INCREMENT_VALUE = "INCREMENT_VALUE"
+  POP = "POP"
 
 def sleep(seconds):
   for remaining in xrange(seconds, 0, -1):
@@ -190,7 +199,6 @@ def _copy_file_to_local(self, remoteip, remotefile, localfile, user, passwd):
   ssh.close()
 
 def execute_http_request(url, method="GET", timeout=60, check_response=True, **kwargs):
-  import requests
   kwargs["timeout"] = timeout
   DEBUG("%s %s" % (method, url))
   DEBUG("Request: %s" % kwargs)
@@ -201,6 +209,47 @@ def execute_http_request(url, method="GET", timeout=60, check_response=True, **k
       raise Exception("'%s' request on url '%s' failed: %s" % (
         method, url, response.content))
   return response
+
+def update_data(dotted_group, dotted_key, operation=None, value=None,
+                timeout=60):
+  data = {
+    "dotted_group": dotted_group,
+    "dotted_key": dotted_key,
+    "value": json.dumps(value)
+  }
+  if operation:
+    data["operation"] = operation
+  url = "http://127.0.0.1:8080/execute"
+  response = requests.request("POST", url, json=data, timeout=timeout)
+  print("Response: %s" % response.content)
+  if not response.ok:
+    raise Exception("POST request on url '%s' failed: %s" % (
+      url, response.content))
+  return json.loads(response.content)["ret_val"]
+
+def get_data(dotted_group, dotted_key, timeout=60):
+  data = {
+    "dotted_group": dotted_group,
+    "dotted_key": dotted_key,
+    "operation": Operations.GET_KEY
+  }
+  url = "http://127.0.0.1:8080/execute"
+  response = requests.request("POST", url, json=data, timeout=timeout)
+  print("Response: %s" % response.content)
+  if not response.ok:
+    raise Exception("POST  request on url '%s' failed: %s" % (
+      url, response.content))
+  return json.loads(response.content)["ret_val"]
+
+
+def get_complete_data(timeout=60):
+  url = "http://127.0.0.1:8080/data"
+  response = requests.request("GET", url)
+  print("Response: %s" % response.content)
+  if not response.ok:
+    raise Exception("GET request on url '%s' failed: %s" % (
+      url, response.content))
+  return json.loads(response.content)["ret_val"]
 
 def get_random_string(length=24):
   """Generates a random alphanumeric word of specified size
@@ -213,3 +262,19 @@ def get_random_string(length=24):
   """
   import uuid
   return uuid.uuid4().hex[:length].lower()
+
+def get_all_user_attributes_of_class(cls):
+  return [getattr(cls, attr) for attr in dir(cls) if not attr.startswith("__")]
+
+
+if __name__ == "__main__":
+  ans = update_data(dotted_group="a.b", dotted_key="c", value={"d":{"e": "123"}})
+  print "update_data returned: %s" % ans
+  print "complete data returned: "
+  print get_complete_data()
+  print "get_data returned: "
+  print get_data(dotted_group="a.b", dotted_key="c.d")
+  ans = update_data(dotted_group="a.b", dotted_key="c", operation=Operations.POP)
+  print "update_data returned: %s" % ans
+  print "complete data returned: "
+  print get_complete_data()
